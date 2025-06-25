@@ -7,6 +7,7 @@ use App\Models\OrderProduct;
 use App\Models\Product;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Livewire\Attributes\On;
 
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -28,6 +29,13 @@ class Pos extends Component implements HasForms
     public $payment_method_id;
     public $orderItems = [];
     public $total_price = 0;
+    public $showScanner = false; // Add this property
+
+    protected $listeners = [
+        'scanResult' => 'handleScanResult',
+        'loadOrderItems' => 'loadOrderItems',
+        'toggleScanner' => 'toggleScanner', // Add this listener
+    ];
 
     public function render()
     {
@@ -47,7 +55,7 @@ class Pos extends Component implements HasForms
                             Forms\Components\TextInput::make('name_customer')
                                 ->required()
                                 ->maxLength(255)
-                                ->default(fn() => $this->nameCustomer),
+                                ->default(fn() => $this->name_customer),
                             Forms\Components\Select::make('gender')
                                 ->options([
                                     'male' => 'Laki-Laki',
@@ -73,8 +81,45 @@ class Pos extends Component implements HasForms
             $this->orderItems = [];
         }
         $this->paymentMethod = \App\Models\PaymentMethod::all();
-        // $this->form->fill(['payment_methods', $this->paymentMethod]); 
         $this->form->fill(['payment_method_id' => $this->paymentMethod->first()?->id]);
+    }
+
+    // Add this method to handle scanner toggle
+    public function toggleScanner()
+    {
+        $this->showScanner = !$this->showScanner;
+        
+        if ($this->showScanner) {
+            // Add small delay to ensure DOM is ready
+            $this->dispatch('scanner-toggled', ['show' => true]);
+        } else {
+            $this->dispatch('scanner-toggled', ['show' => false]);
+        }
+    }
+
+    #[On('scanResult')]
+    public function handleScanResult($decodedText)
+    {
+        // Close scanner after successful scan
+        $this->showScanner = false;
+        
+        // Cari produk berdasarkan barcode
+        $product = Product::where('barcode', $decodedText)->first();
+        
+        if ($product) {
+            $this->addToOrder($product->id);
+            Notification::make()
+                ->title('Barcode berhasil dipindai')
+                ->body("Produk {$product->name} ditambahkan ke keranjang.")
+                ->success()
+                ->send();
+        } else {
+            Notification::make()
+                ->title('Produk tidak ditemukan')
+                ->body("Barcode {$decodedText} tidak ditemukan dalam database.")
+                ->warning()
+                ->send();
+        }
     }
 
     public function addToOrder($productId) {
@@ -110,7 +155,6 @@ class Pos extends Component implements HasForms
             }
 
             session()->put('orderItems', $this->orderItems);
-            // $this->calculateTotal();
             $this->calculateTotal();
             $this->form->fill(['total_price' => $this->total_price]);
             Notification::make()
@@ -165,7 +209,7 @@ class Pos extends Component implements HasForms
                     $this->orderItems[$key]['quantity']--;
                 } else {
                     unset($this->orderItems[$key]);
-                    $this->orderItems = array_values($this->orderItems); // Reindex the array
+                    $this->orderItems = array_values($this->orderItems);
                 }
                 break;
             }
@@ -189,10 +233,7 @@ class Pos extends Component implements HasForms
             'name_customer' => 'required|max:255',
             'gender' => 'required|in:male,female',
             'payment_method_id' => 'required|exists:payment_methods,id',
-
         ]);
-
-
 
         $payment_method_id_temp = $this->payment_method_id;
         $order = Order::create([
@@ -215,5 +256,4 @@ class Pos extends Component implements HasForms
         session()->forget('orderItems');
         return redirect()->to('admin/orders');
     }
-
 }

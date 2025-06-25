@@ -23,6 +23,12 @@ class Product extends Model
         'barcode',
     ];
 
+    protected $appends = [
+        'image_url',
+        'price_formatted',
+    ];
+
+
     public function category() {
         return $this->belongsTo(Category::class);
     }

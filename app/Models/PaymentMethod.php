@@ -15,6 +15,13 @@ class PaymentMethod extends Model
         'is_cash'
     ];
 
+    protected $appends = [
+        'image_url',
+    ];
+    public function getImageUrlAttribute() {
+        return $this->image ? asset('storage/' . $this->image) : null;
+    }
+
     protected $casts = [
         'is_cash' => 'boolean'
     ];
